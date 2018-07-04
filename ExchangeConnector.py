@@ -89,6 +89,16 @@ class ExchangeConnector:
 		if folder != None:
 			return True
 		return False
+
+	def sendMessage(self, to, subject, body, attachmentBytes=None, attachmentName="file.txt"):
+		if self.account is not None:
+			self.lock.acquire()
+			m = Message(account=self.account, to_recipients=[Mailbox(email_address=to.strip())], subject=subject.strip(), body=HTMLBody(body))
+			if attachmentBytes is not None:
+				f = FileAttachment(name=attachmentName, content=attachmentBytes)
+				m.attach(f)
+			m.send()
+			self.lock.release()
 			
 	def refresh(self):
 		if self.account is not None:

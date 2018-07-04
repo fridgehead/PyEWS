@@ -5,6 +5,9 @@ from time import sleep
 from exchangelib.items import Message,CalendarItem
 from glob import glob
 import traceback
+import argparse
+import shlex
+import os
 
 class BackgroundThread(Thread):
 	def __init__(self, connect):
@@ -22,7 +25,9 @@ class BackgroundThread(Thread):
 #			print " ! heartbeat"
 				
 			
-
+class SendParser(argparse.ArgumentParser):
+    def error(self, message):
+        print 'error: %s\n' % message
 
 class MailClientPrompt(Cmd):
 	
@@ -41,6 +46,45 @@ class MailClientPrompt(Cmd):
 		thread.start()
 				
 		Cmd.__init__(self)
+
+	def do_send(self, args):
+		parser = SendParser(prog="send")
+		parser.add_argument("-t", "--to", help="Recipient")
+		parser.add_argument("-s", "--subject", help="Message Subject")
+		parser.add_argument("-a", "--attachmentfile", help="Message attachment")
+		parser.add_argument("-n", "--attachmentname", help="Message attachment name")
+		group = parser.add_mutually_exclusive_group()
+		group.add_argument("-b", "--body", help="Message body")
+		group.add_argument("-f", "--bodyfile", help="Message body file")
+		argList = ""
+		try:
+			argList = parser.parse_args(shlex.split(args))
+			body = ""
+			if argList.bodyfile is not None:
+				print "loading body from " + argList.bodyfile
+				f = open (argList.bodyfile, "r")
+				body = f.read()
+				f.close()
+			else:
+				body = argList.body
+
+			if argList.attachmentfile is not None:
+				f = open (argList.attachmentfile, "rb")
+				content = f.read()
+				f.close()
+				name = ""
+				if argList.attachmentname is None:
+					name = os.path.basename(argList.attachmentfile)
+				else:
+					name = argList.attachmentname
+				self.connector.sendMessage(argList.to, argList.subject, body, attachmentBytes=content, attachmentName=argList.attachmentname)	
+			else:
+				self.connector.sendMessage(argList.to, argList.subject, body)
+		except SystemExit:
+			parser.print_help()
+			return
+			
+		
 
 	def do_connect(self, args):
 		url = self.settingsMap["url"] + "/EWS/Exchange.asmx"
@@ -68,10 +112,11 @@ class MailClientPrompt(Cmd):
 				print "[%s] = %s" % (k, self.settingsMap[k])
 			return
 		parts = args.split("=")
-		parts = [a.strip() for a in parts]
-		print " setting %s to %s" % (parts[0], parts[1])
-		if parts[0] in self.settingsMap.keys():
-			self.settingsMap[parts[0]] = parts[1]
+		if len(parts) > 0:
+			parts = [a.strip() for a in parts]
+			print " setting %s to %s" % (parts[0], parts[1])
+			if parts[0] in self.settingsMap.keys():
+				self.settingsMap[parts[0]] = parts[1]
 
 	def do_ls(self, args):
 		print "Contents of folder..."
